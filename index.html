@@ -131,6 +131,14 @@
         </section>
 
         <section class="screen" id="homeScreen" data-title="ホーム">
+          <section class="today-shift-card" aria-labelledby="todayShiftTitle">
+            <div>
+              <span class="mini-label">今日の出番</span>
+              <h2 id="todayShiftTitle">本日の出番予定はありません</h2>
+              <p id="todayShiftMeta">出番・シフトから予定を登録できます。</p>
+            </div>
+            <button class="small-action" type="button" data-nav="shifts">登録</button>
+          </section>
           <div class="month-row">
             <button class="icon-button" id="prevMonthBtn" type="button" aria-label="前月">‹</button>
             <input id="homeMonth" type="month" />
@@ -150,12 +158,85 @@
               <strong id="homeNet">0円</strong>
             </article>
           </div>
+          <div class="menu-grid" aria-label="乗務員メニュー">
+            <button class="menu-card" type="button" data-nav="shifts"><span>勤</span><strong>出番・シフト</strong></button>
+            <button class="menu-card" type="button" data-nav="payroll"><span>給</span><strong>給与明細</strong></button>
+            <button class="menu-card" type="button" data-nav="profile"><span>身</span><strong>プロフィール</strong></button>
+          </div>
           <button class="floating-add" id="newEntryBtn" type="button">＋ 売上入力</button>
           <div class="section-head">
             <h2>当月の記録</h2>
             <span id="homeCount">0件</span>
           </div>
           <div class="entry-list" id="homeEntries"></div>
+        </section>
+
+        <section class="screen" id="shiftsScreen" data-title="出番・シフト">
+          <div class="month-row">
+            <button class="icon-button" id="prevShiftMonthBtn" type="button" aria-label="前月">‹</button>
+            <input id="shiftMonth" type="month" />
+            <button class="icon-button" id="nextShiftMonthBtn" type="button" aria-label="翌月">›</button>
+          </div>
+          <form class="form-card stack" id="shiftForm">
+            <input type="hidden" name="id" />
+            <div class="two-col">
+              <label><span>日付</span><input name="date" type="date" required /></label>
+              <label>
+                <span>区分</span>
+                <select name="kind" required>
+                  <option value="出番">出番</option>
+                  <option value="明休">明休</option>
+                  <option value="公休">公休</option>
+                  <option value="有休">有休</option>
+                  <option value="その他">その他</option>
+                </select>
+              </label>
+            </div>
+            <div class="two-col">
+              <label><span>予定開始</span><input name="planStart" type="time" /></label>
+              <label><span>予定終了</span><input name="planEnd" type="time" /></label>
+            </div>
+            <label><span>メモ</span><textarea name="memo" rows="2" placeholder="乗務予定メモ"></textarea></label>
+            <div class="action-row inline">
+              <button class="danger-button hidden" id="deleteShiftBtn" type="button">削除</button>
+              <button class="ghost-button" id="resetShiftBtn" type="button">新規</button>
+              <button class="primary-button" type="submit">保存</button>
+            </div>
+          </form>
+          <div class="section-head">
+            <h2>月の予定</h2>
+            <button class="text-button" type="button" data-nav="home">戻る</button>
+          </div>
+          <div class="entry-list" id="shiftList"></div>
+        </section>
+
+        <section class="screen" id="payrollScreen" data-title="給与明細">
+          <div class="month-row single">
+            <input id="payrollMonth" type="month" />
+          </div>
+          <div class="notice-card">
+            会社の正式明細ではありません。自分用の目安として、保存済みの売上と設定値から概算しています。
+          </div>
+          <div class="payroll-panel" id="payrollPanel"></div>
+          <div class="button-grid">
+            <button class="ghost-button" type="button" data-nav="settings">歩合率・基本給を設定</button>
+            <button class="ghost-button" type="button" data-nav="home">戻る</button>
+          </div>
+        </section>
+
+        <section class="screen" id="profileScreen" data-title="プロフィール">
+          <div class="profile-card" id="profileView"></div>
+          <form class="form-card stack" id="profileForm">
+            <label><span>乗務員名</span><input name="driverName" required /></label>
+            <label><span>社員番号</span><input name="employeeNo" /></label>
+            <label><span>所属営業所</span><input name="office" /></label>
+            <label><span>車番</span><input name="carNo" /></label>
+            <label><span>免許番号</span><input name="licenseNo" /></label>
+            <div class="button-grid">
+              <button class="ghost-button" type="button" data-nav="home">戻る</button>
+              <button class="primary-button" type="submit">プロフィールを保存</button>
+            </div>
+          </form>
         </section>
 
         <section class="screen" id="entryScreen" data-title="売上入力">
@@ -238,6 +319,18 @@
               <span>乗務員名</span>
               <input name="driverName" required />
             </label>
+            <div class="two-col">
+              <label><span>歩合率(%)</span><input name="payRate" type="number" min="0" step="0.1" inputmode="decimal" /></label>
+              <label><span>基本給</span><input name="baseSalary" type="number" min="0" step="1" inputmode="numeric" /></label>
+            </div>
+            <div class="two-col">
+              <label><span>社員番号</span><input name="employeeNo" /></label>
+              <label><span>所属営業所</span><input name="office" /></label>
+            </div>
+            <div class="two-col">
+              <label><span>車番</span><input name="carNo" /></label>
+              <label><span>免許番号</span><input name="licenseNo" /></label>
+            </div>
             <fieldset class="segmented">
               <legend>起動時ロック</legend>
               <label><input type="radio" name="authMode" value="idpw" />ID/PW</label>

@@ -3,16 +3,30 @@ import {
   clearEntries,
   deleteDatabase,
   deleteEntry,
+  deleteShift,
   exportAllData,
   getAllEntries,
   getEntry,
   getSettings,
+  getShift,
+  getAllShifts,
   mergeBackup,
   replaceAll,
   saveEntry,
   saveSettings,
+  saveShift,
 } from "./lib/db.js";
-import { calcTotal, filterByMonth, filterByRange, formatNumber, formatYen, monthKey, summarizeEntries, todayString } from "./lib/calc.js";
+import {
+  calcTotal,
+  estimatePayroll,
+  filterByMonth,
+  filterByRange,
+  formatNumber,
+  formatYen,
+  monthKey,
+  summarizeEntries,
+  todayString,
+} from "./lib/calc.js";
 import {
   downloadBlob,
   filenameFor,
@@ -29,6 +43,7 @@ const state = {
   settings: null,
   unlocked: false,
   entries: [],
+  shifts: [],
   activeScreen: "setup",
   visibleMonth: monthKey(new Date()),
   restorePayload: null,
@@ -39,6 +54,9 @@ const screens = {
   lock: $("#lockScreen"),
   home: $("#homeScreen"),
   entry: $("#entryScreen"),
+  shifts: $("#shiftsScreen"),
+  payroll: $("#payrollScreen"),
+  profile: $("#profileScreen"),
   history: $("#historyScreen"),
   export: $("#exportScreen"),
   settings: $("#settingsScreen"),
@@ -52,6 +70,16 @@ function toast(message) {
   toast.timer = setTimeout(() => node.classList.remove("show"), 2200);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[char]);
+}
+
 function showScreen(name) {
   state.activeScreen = name;
   Object.entries(screens).forEach(([key, screen]) => screen.classList.toggle("active", key === name));
@@ -63,14 +91,22 @@ function showScreen(name) {
   if (name === "history") renderHistory();
   if (name === "export") renderExportCount();
   if (name === "settings") fillSettingsForm();
+  if (name === "shifts") renderShifts();
+  if (name === "payroll") renderPayroll();
+  if (name === "profile") renderProfile();
 }
 
-async function refreshEntries() {
-  state.entries = await getAllEntries();
+async function refreshData() {
+  [state.entries, state.shifts] = await Promise.all([getAllEntries(), getAllShifts()]);
   renderHome();
   renderHistory();
   renderExportCount();
+  renderShifts();
+  renderPayroll();
+  renderProfile();
 }
+
+const refreshEntries = refreshData;
 
 function currentMonthEntries() {
   return filterByMonth(state.entries, state.visibleMonth);
@@ -85,7 +121,25 @@ function renderHome() {
   $("#homeTrips").textContent = `${formatNumber(summary.trips)}回`;
   $("#homeNet").textContent = formatYen(summary.net);
   $("#homeCount").textContent = `${entries.length}件`;
+  renderTodayShift();
   renderEntryList($("#homeEntries"), entries);
+}
+
+function shiftTimeLabel(shift) {
+  if (!shift?.planStart && !shift?.planEnd) return "時間未設定";
+  return `${shift.planStart || "--:--"}-${shift.planEnd || "--:--"}`;
+}
+
+function renderTodayShift() {
+  const today = todayString();
+  const shift = state.shifts.find((item) => item.date === today);
+  if (!shift) {
+    $("#todayShiftTitle").textContent = "本日の出番予定はありません";
+    $("#todayShiftMeta").textContent = "出番・シフトから予定を登録できます。";
+    return;
+  }
+  $("#todayShiftTitle").textContent = `${shift.kind} ${shift.kind === "出番" ? shiftTimeLabel(shift) : ""}`.trim();
+  $("#todayShiftMeta").textContent = shift.memo || `${shift.date} の予定`;
 }
 
 function renderHistory() {
@@ -169,6 +223,110 @@ function updateLiveTotal() {
   $("#liveTotal").textContent = formatYen(calcTotal(formEntryPayload()));
 }
 
+function fillShiftForm(shift = null) {
+  const form = $("#shiftForm");
+  form.reset();
+  form.elements.id.value = shift?.id || "";
+  form.date.value = shift?.date || todayString();
+  form.kind.value = shift?.kind || "出番";
+  form.planStart.value = shift?.planStart || "";
+  form.planEnd.value = shift?.planEnd || "";
+  form.memo.value = shift?.memo || "";
+  $("#deleteShiftBtn").classList.toggle("hidden", !shift?.id);
+}
+
+async function openShift(id = null) {
+  const shift = id ? await getShift(id) : null;
+  fillShiftForm(shift);
+  showScreen("shifts");
+}
+
+function formShiftPayload() {
+  const form = $("#shiftForm");
+  return {
+    id: form.elements.id.value || undefined,
+    date: form.date.value,
+    kind: form.kind.value,
+    planStart: form.planStart.value || null,
+    planEnd: form.planEnd.value || null,
+    memo: form.memo.value,
+  };
+}
+
+function renderShifts() {
+  const monthInput = $("#shiftMonth");
+  if (!monthInput) return;
+  monthInput.value = state.visibleMonth;
+  const shifts = filterByMonth(state.shifts, state.visibleMonth);
+  const container = $("#shiftList");
+  container.innerHTML = "";
+  if (!shifts.length) {
+    container.innerHTML = '<p class="empty">この月の出番予定はまだありません。</p>';
+    return;
+  }
+  shifts.forEach((shift) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `shift-item kind-${shift.kind}`;
+    button.dataset.id = shift.id;
+    button.innerHTML = `
+      <span class="shift-date">${shift.date}</span>
+      <span>
+        <strong>${shift.kind}</strong>
+        <small>${shiftTimeLabel(shift)}${shift.memo ? ` / ${escapeHtml(shift.memo)}` : ""}</small>
+      </span>
+    `;
+    button.addEventListener("click", () => openShift(shift.id));
+    container.append(button);
+  });
+}
+
+function renderPayroll() {
+  const monthInput = $("#payrollMonth");
+  if (!monthInput) return;
+  monthInput.value = state.visibleMonth;
+  const summary = summarizeEntries(currentMonthEntries());
+  const payRate = state.settings?.payRate || 0;
+  const baseSalary = state.settings?.baseSalary || 0;
+  const variablePay = estimatePayroll(summary.total, { payRate, baseSalary: 0 });
+  const total = estimatePayroll(summary.total, { payRate, baseSalary });
+  $("#payrollPanel").innerHTML = `
+    <div><span>対象月</span><strong>${state.visibleMonth}</strong></div>
+    <div><span>売上合計</span><strong>${formatYen(summary.total)}</strong></div>
+    <div><span>歩合 ${formatNumber(payRate, 1)}%</span><strong>${formatYen(variablePay)}</strong></div>
+    <div><span>基本給</span><strong>${formatYen(baseSalary)}</strong></div>
+    <div class="payroll-total"><span>概算合計</span><strong>${formatYen(total)}</strong></div>
+  `;
+}
+
+function profileFieldsFromSettings() {
+  return {
+    driverName: state.settings?.driverName || "",
+    employeeNo: state.settings?.employeeNo || "",
+    office: state.settings?.office || "",
+    carNo: state.settings?.carNo || "",
+    licenseNo: state.settings?.licenseNo || "",
+  };
+}
+
+function renderProfile() {
+  if (!state.settings) return;
+  const fields = profileFieldsFromSettings();
+  $("#profileView").innerHTML = `
+    <div class="profile-name">${escapeHtml(fields.driverName || "未設定")}</div>
+    <dl>
+      <div><dt>社員番号</dt><dd>${escapeHtml(fields.employeeNo || "-")}</dd></div>
+      <div><dt>所属営業所</dt><dd>${escapeHtml(fields.office || "-")}</dd></div>
+      <div><dt>車番</dt><dd>${escapeHtml(fields.carNo || "-")}</dd></div>
+      <div><dt>免許番号</dt><dd>${escapeHtml(fields.licenseNo || "-")}</dd></div>
+    </dl>
+  `;
+  const form = $("#profileForm");
+  Object.entries(fields).forEach(([key, value]) => {
+    form[key].value = value;
+  });
+}
+
 function toggleAuthFields(scope) {
   const form = scope === "setup" ? $("#setupForm") : $("#settingsForm");
   const fields = scope === "setup" ? $("#setupAuthFields") : $("#settingsAuthFields");
@@ -178,13 +336,21 @@ function toggleAuthFields(scope) {
 
 async function buildSettingsFromForm(form, allowExistingPassword = false) {
   const authMode = new FormData(form).get("authMode");
-  const driverName = form.driverName.value;
-  if (authMode === "none") return { driverName, authMode };
+  const base = {
+    driverName: form.driverName.value,
+    employeeNo: form.employeeNo?.value ?? state.settings?.employeeNo ?? "",
+    office: form.office?.value ?? state.settings?.office ?? "",
+    carNo: form.carNo?.value ?? state.settings?.carNo ?? "",
+    licenseNo: form.licenseNo?.value ?? state.settings?.licenseNo ?? "",
+    payRate: form.payRate?.value ?? state.settings?.payRate ?? 0,
+    baseSalary: form.baseSalary?.value ?? state.settings?.baseSalary ?? 0,
+  };
+  if (authMode === "none") return { ...base, authMode };
   const userId = form.userId.value;
   const password = form.password.value;
   if (!password && allowExistingPassword && state.settings?.passwordHash) {
     return {
-      driverName,
+      ...base,
       authMode,
       userId,
       passwordHash: state.settings.passwordHash,
@@ -192,13 +358,19 @@ async function buildSettingsFromForm(form, allowExistingPassword = false) {
     };
   }
   const auth = await hashPassword(password, createSalt());
-  return { driverName, authMode, userId, ...auth };
+  return { ...base, authMode, userId, ...auth };
 }
 
 function fillSettingsForm() {
   const form = $("#settingsForm");
   if (!state.settings) return;
   form.driverName.value = state.settings.driverName || "";
+  form.payRate.value = state.settings.payRate ?? 0;
+  form.baseSalary.value = state.settings.baseSalary ?? 0;
+  form.employeeNo.value = state.settings.employeeNo || "";
+  form.office.value = state.settings.office || "";
+  form.carNo.value = state.settings.carNo || "";
+  form.licenseNo.value = state.settings.licenseNo || "";
   form.userId.value = state.settings.userId || "";
   form.password.value = "";
   $$('input[name="authMode"]', form).forEach((input) => {
@@ -263,6 +435,8 @@ function changeMonth(delta) {
   renderHome();
   renderHistory();
   renderExportCount();
+  renderShifts();
+  renderPayroll();
 }
 
 async function init() {
@@ -335,7 +509,53 @@ $("#settingsForm").addEventListener("submit", async (event) => {
   try {
     state.settings = await saveSettings(await buildSettingsFromForm(event.currentTarget, true));
     driverLabel();
+    renderPayroll();
+    renderProfile();
     toast("設定を保存しました。");
+  } catch (error) {
+    toast(error.message);
+  }
+});
+
+$("#shiftForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const shift = await saveShift(formShiftPayload());
+    state.visibleMonth = monthKey(shift.date);
+    await refreshData();
+    fillShiftForm();
+    toast("出番予定を保存しました。");
+  } catch (error) {
+    toast(error.message);
+  }
+});
+
+$("#deleteShiftBtn").addEventListener("click", async () => {
+  const id = $("#shiftForm").elements.id.value;
+  if (!id || !confirm("この出番予定を削除しますか？")) return;
+  await deleteShift(id);
+  await refreshData();
+  fillShiftForm();
+  toast("出番予定を削除しました。");
+});
+
+$("#resetShiftBtn").addEventListener("click", () => fillShiftForm());
+
+$("#profileForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const form = event.currentTarget;
+    state.settings = await saveSettings({
+      ...state.settings,
+      driverName: form.driverName.value,
+      employeeNo: form.employeeNo.value,
+      office: form.office.value,
+      carNo: form.carNo.value,
+      licenseNo: form.licenseNo.value,
+    });
+    driverLabel();
+    renderProfile();
+    toast("プロフィールを保存しました。");
   } catch (error) {
     toast(error.message);
   }
@@ -353,6 +573,18 @@ $("#historyMonth").addEventListener("change", (event) => {
 });
 $("#prevMonthBtn").addEventListener("click", () => changeMonth(-1));
 $("#nextMonthBtn").addEventListener("click", () => changeMonth(1));
+$("#shiftMonth").addEventListener("change", (event) => {
+  state.visibleMonth = event.target.value || monthKey(new Date());
+  renderHome();
+  renderShifts();
+});
+$("#payrollMonth").addEventListener("change", (event) => {
+  state.visibleMonth = event.target.value || monthKey(new Date());
+  renderHome();
+  renderPayroll();
+});
+$("#prevShiftMonthBtn").addEventListener("click", () => changeMonth(-1));
+$("#nextShiftMonthBtn").addEventListener("click", () => changeMonth(1));
 $("#newEntryBtn").addEventListener("click", () => openEntry());
 $("#entryForm").addEventListener("input", updateLiveTotal);
 

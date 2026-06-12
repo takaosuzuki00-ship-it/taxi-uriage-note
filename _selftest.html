@@ -18,8 +18,17 @@
     <pre id="log"></pre>
     <script type="module">
       import { hashPassword, verifyPassword, PBKDF2_ITERATIONS } from "./lib/auth.js";
-      import { calcNet, calcTotal, filterByMonth, summarizeEntries } from "./lib/calc.js";
-      import { deleteEntry, getAllEntries, getEntry, saveEntry, validateEntry } from "./lib/db.js";
+      import { calcNet, calcTotal, estimatePayroll, filterByMonth, summarizeEntries, todayString } from "./lib/calc.js";
+      import {
+        deleteEntry,
+        deleteShift,
+        getAllEntries,
+        getAllShifts,
+        getEntry,
+        saveEntry,
+        saveShift,
+        validateEntry,
+      } from "./lib/db.js";
       import { csvEscape, makeCsv, makeWorkbookArray, rowsForExport } from "./lib/exporter.js";
 
       const log = document.querySelector("#log");
@@ -46,8 +55,12 @@
         };
         assert(calcTotal(sample) === 19000, "calcTotal sums payment fields");
         assert(calcNet(sample) === 15200, "calcNet subtracts fuel and other expense");
+        assert(estimatePayroll(100000, { payRate: 50, baseSalary: 0 }) === 50000, "estimatePayroll calculates 50 percent commission");
+        assert(estimatePayroll(80000, { payRate: 60, baseSalary: 20000 }) === 68000, "estimatePayroll adds base salary");
         assert(summarizeEntries([sample, { ...sample, date: "2026-07-01" }]).total === 38000, "summarizeEntries sums totals");
         assert(filterByMonth([sample, { ...sample, date: "2026-07-01" }], "2026-06").length === 1, "filterByMonth filters YYYY-MM");
+        const today = todayString();
+        assert([{ date: "2026-01-01" }, { date: today }].some((shift) => shift.date === today), "today shift detection matches date===today");
 
         assert(csvEscape('a,b"c') === '"a,b""c"', "CSV escapes comma and quote");
         const csv = makeCsv([sample]);
@@ -81,6 +94,11 @@
         assert(all.some((entry) => entry.id === saved.id), "db getAll includes saved entry");
         await deleteEntry(saved.id);
         assert(!(await getEntry(saved.id)), "db delete removes entry");
+
+        const shift = await saveShift({ date: today, kind: "出番", planStart: "08:00", planEnd: "20:00", memo: "selftest" });
+        const shifts = await getAllShifts();
+        assert(shifts.some((item) => item.date === today && item.id === shift.id), "db shifts include today's shift");
+        await deleteShift(shift.id);
 
         status.textContent = "PASS";
         status.className = "pass";

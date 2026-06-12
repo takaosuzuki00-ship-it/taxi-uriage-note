@@ -34,6 +34,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -197,6 +198,7 @@ label {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -213,6 +215,7 @@ textarea {
 }
 
 input:focus,
+select:focus,
 textarea:focus {
   border-color: var(--green);
   box-shadow: 0 0 0 3px rgba(47, 128, 103, 0.15);
@@ -283,7 +286,9 @@ textarea:focus {
 .ghost-button,
 .danger-button,
 .file-button,
-.floating-add {
+.floating-add,
+.small-action,
+.text-button {
   min-height: 48px;
   border-radius: 8px;
   padding: 12px 14px;
@@ -314,6 +319,42 @@ textarea:focus {
   grid-template-columns: 48px 1fr 48px;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.today-shift-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 16px;
+  border-radius: var(--radius);
+  color: #fff9e8;
+  background:
+    linear-gradient(135deg, rgba(246, 200, 64, 0.18), transparent 42%),
+    linear-gradient(155deg, #183b3a, #102a2b);
+  box-shadow: var(--shadow);
+}
+
+.mini-label {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(255, 249, 232, 0.68);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.today-shift-card p {
+  margin-top: 6px;
+  color: rgba(255, 249, 232, 0.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.small-action {
+  min-height: 40px;
+  background: var(--taxi);
+  color: #1c1710;
 }
 
 .month-row.single {
@@ -360,6 +401,44 @@ textarea:focus {
 .summary-card strong {
   font-size: 23px;
   line-height: 1.1;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  margin: 12px 0;
+}
+
+.menu-card {
+  min-height: 92px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 248, 0.94);
+  color: var(--deep);
+  box-shadow: 0 10px 24px rgba(25, 35, 33, 0.08);
+}
+
+.menu-card span {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--deep);
+  color: var(--taxi);
+  font-weight: 950;
+}
+
+.menu-card strong {
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .floating-add {
@@ -415,6 +494,48 @@ textarea:focus {
   font-size: 12px;
 }
 
+.shift-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 248, 0.94);
+  padding: 13px;
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  text-align: left;
+  color: inherit;
+}
+
+.shift-date {
+  color: var(--deep);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.shift-item strong {
+  display: block;
+  font-size: 17px;
+}
+
+.shift-item small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kind-出番 {
+  border-left: 5px solid var(--taxi);
+}
+
+.kind-公休,
+.kind-有休 {
+  border-left: 5px solid var(--green);
+}
+
+.kind-明休,
+.kind-その他 {
+  border-left: 5px solid var(--meter);
+}
+
 .summary-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -456,6 +577,107 @@ textarea:focus {
   backdrop-filter: blur(10px);
   padding: 10px 0;
   margin-top: 4px;
+}
+
+.action-row.inline {
+  position: static;
+  padding: 0;
+  margin-top: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.text-button {
+  min-height: 36px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--green);
+}
+
+.notice-card,
+.payroll-panel,
+.profile-card {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 240, 0.9);
+  box-shadow: 0 10px 26px rgba(25, 35, 33, 0.08);
+}
+
+.notice-card {
+  padding: 13px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.payroll-panel {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.payroll-panel div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 253, 248, 0.84);
+}
+
+.payroll-panel span,
+.profile-card dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.payroll-panel strong,
+.profile-card dd {
+  color: var(--deep);
+  font-weight: 950;
+}
+
+.payroll-panel .payroll-total {
+  background: var(--deep);
+  color: #fff9e8;
+}
+
+.payroll-panel .payroll-total span,
+.payroll-panel .payroll-total strong {
+  color: #fff9e8;
+}
+
+.profile-card {
+  padding: 16px;
+}
+
+.profile-name {
+  margin-bottom: 12px;
+  color: var(--deep);
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.profile-card dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.profile-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.profile-card dd {
+  margin: 0;
+  text-align: right;
 }
 
 .hidden {
