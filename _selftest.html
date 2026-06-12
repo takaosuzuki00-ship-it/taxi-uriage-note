@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>タクシー売上ノート selftest</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; background: #f6f2e8; color: #16201f; }
+      pre { background: #102a2b; color: #fff9e8; padding: 16px; border-radius: 8px; white-space: pre-wrap; }
+      .pass { color: #2f8067; font-weight: 800; }
+      .fail { color: #b63c2d; font-weight: 800; }
+    </style>
+    <script src="vendor/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <h1>タクシー売上ノート selftest</h1>
+    <p id="status">running...</p>
+    <pre id="log"></pre>
+    <script type="module">
+      import { hashPassword, verifyPassword, PBKDF2_ITERATIONS } from "./lib/auth.js";
+      import { calcNet, calcTotal, filterByMonth, summarizeEntries } from "./lib/calc.js";
+      import { deleteEntry, getAllEntries, getEntry, saveEntry, validateEntry } from "./lib/db.js";
+      import { csvEscape, makeCsv, makeWorkbookArray, rowsForExport } from "./lib/exporter.js";
+
+      const log = document.querySelector("#log");
+      const status = document.querySelector("#status");
+      const lines = [];
+      const assert = (condition, message) => {
+        if (!condition) throw new Error(message);
+        lines.push(`PASS ${message}`);
+      };
+
+      try {
+        const sample = {
+          date: "2026-06-12",
+          trips: 18,
+          km: 121.5,
+          cash: 10000,
+          card: 6200,
+          ic: 900,
+          qr: 500,
+          ticket: 1400,
+          fuel: 3000,
+          expenseOther: 800,
+          memo: "雨, 強め\n深夜",
+        };
+        assert(calcTotal(sample) === 19000, "calcTotal sums payment fields");
+        assert(calcNet(sample) === 15200, "calcNet subtracts fuel and other expense");
+        assert(summarizeEntries([sample, { ...sample, date: "2026-07-01" }]).total === 38000, "summarizeEntries sums totals");
+        assert(filterByMonth([sample, { ...sample, date: "2026-07-01" }], "2026-06").length === 1, "filterByMonth filters YYYY-MM");
+
+        assert(csvEscape('a,b"c') === '"a,b""c"', "CSV escapes comma and quote");
+        const csv = makeCsv([sample]);
+        assert(csv.charCodeAt(0) === 0xfeff, "CSV starts with UTF-8 BOM");
+        assert(csv.includes('"雨, 強め\r\n深夜"'), "CSV escapes newline values");
+        const rows = rowsForExport([sample]);
+        assert(rows.at(-1).date === "期間合計" && rows.at(-1).net === 15200, "export rows include total row");
+        const workbookRows = makeWorkbookArray([sample]);
+        assert(workbookRows[0][0] === "日付" && workbookRows[1][8] === 19000, "xlsx mapping keeps numeric sales total");
+
+        assert(PBKDF2_ITERATIONS >= 100000, "PBKDF2 iterations are >= 100000");
+        const auth = await hashPassword("pass1234");
+        assert(await verifyPassword("pass1234", auth.salt, auth.passwordHash), "auth verifies correct password");
+        assert(!(await verifyPassword("wrong", auth.salt, auth.passwordHash)), "auth rejects wrong password");
+
+        let failedValidation = false;
+        try {
+          validateEntry({ ...sample, cash: -1 });
+        } catch {
+          failedValidation = true;
+        }
+        assert(failedValidation, "db validation rejects negative numbers");
+
+        const saved = await saveEntry({ ...sample, id: undefined, workStart: "08:00", workEnd: "19:30" });
+        const fetched = await getEntry(saved.id);
+        assert(fetched.total === 19000, "db save/get roundtrip preserves auto total");
+        await saveEntry({ ...fetched, cash: 11000 });
+        const updated = await getEntry(saved.id);
+        assert(updated.total === 20000, "db update recalculates total");
+        const all = await getAllEntries();
+        assert(all.some((entry) => entry.id === saved.id), "db getAll includes saved entry");
+        await deleteEntry(saved.id);
+        assert(!(await getEntry(saved.id)), "db delete removes entry");
+
+        status.textContent = "PASS";
+        status.className = "pass";
+      } catch (error) {
+        lines.push(`FAIL ${error.stack || error.message}`);
+        status.textContent = "FAIL";
+        status.className = "fail";
+      } finally {
+        log.textContent = lines.join("\n");
+      }
+    </script>
+  </body>
+</html>

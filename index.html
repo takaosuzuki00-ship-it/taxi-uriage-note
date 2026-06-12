@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#102a2b" />
+    <title>タクシー売上ノート</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="vendor/xlsx.full.min.js" defer></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">タクシー売上ノート</p>
+          <h1 id="screenTitle">ホーム</h1>
+        </div>
+        <div class="driver-chip" id="driverChip">未設定</div>
+      </header>
+
+      <main class="screens">
+        <section class="screen auth-screen active" id="setupScreen" data-title="初回セットアップ">
+          <div class="hero-panel">
+            <div class="taxi-mark">売</div>
+            <h2>今日の売上を、この端末だけに残す。</h2>
+            <p>Excel / CSV 出力までスマホで完結。データは外部送信しません。</p>
+          </div>
+          <form class="stack form-card" id="setupForm">
+            <label>
+              <span>乗務員名</span>
+              <input name="driverName" autocomplete="name" required placeholder="例: 鈴木" />
+            </label>
+            <fieldset class="segmented">
+              <legend>起動時ロック</legend>
+              <label><input type="radio" name="authMode" value="idpw" checked />ID/PWを設定</label>
+              <label><input type="radio" name="authMode" value="none" />ロックなし</label>
+            </fieldset>
+            <div class="auth-fields" id="setupAuthFields">
+              <label>
+                <span>ログインID</span>
+                <input name="userId" autocomplete="username" placeholder="任意のID" />
+              </label>
+              <label>
+                <span>パスワード</span>
+                <input name="password" type="password" autocomplete="new-password" placeholder="4文字以上" />
+              </label>
+            </div>
+            <button class="primary-button" type="submit">利用を開始</button>
+          </form>
+        </section>
+
+        <section class="screen auth-screen" id="lockScreen" data-title="ロック解除">
+          <div class="hero-panel compact">
+            <div class="taxi-mark">鍵</div>
+            <h2>ロック中</h2>
+            <p>設定したIDとパスワードで解除します。</p>
+          </div>
+          <form class="stack form-card" id="loginForm">
+            <label>
+              <span>ログインID</span>
+              <input name="userId" autocomplete="username" required />
+            </label>
+            <label>
+              <span>パスワード</span>
+              <input name="password" type="password" autocomplete="current-password" required />
+            </label>
+            <button class="primary-button" type="submit">解除</button>
+          </form>
+        </section>
+
+        <section class="screen" id="homeScreen" data-title="ホーム">
+          <div class="month-row">
+            <button class="icon-button" id="prevMonthBtn" type="button" aria-label="前月">‹</button>
+            <input id="homeMonth" type="month" />
+            <button class="icon-button" id="nextMonthBtn" type="button" aria-label="翌月">›</button>
+          </div>
+          <div class="summary-grid">
+            <article class="summary-card primary">
+              <span>売上合計</span>
+              <strong id="homeTotal">0円</strong>
+            </article>
+            <article class="summary-card">
+              <span>営業回数</span>
+              <strong id="homeTrips">0回</strong>
+            </article>
+            <article class="summary-card">
+              <span>手取り概算</span>
+              <strong id="homeNet">0円</strong>
+            </article>
+          </div>
+          <button class="floating-add" id="newEntryBtn" type="button">＋ 売上入力</button>
+          <div class="section-head">
+            <h2>当月の記録</h2>
+            <span id="homeCount">0件</span>
+          </div>
+          <div class="entry-list" id="homeEntries"></div>
+        </section>
+
+        <section class="screen" id="entryScreen" data-title="売上入力">
+          <form class="entry-form" id="entryForm">
+            <input type="hidden" name="id" />
+            <div class="form-card">
+              <label>
+                <span>乗務日</span>
+                <input name="date" type="date" required />
+              </label>
+              <div class="two-col">
+                <label><span>営業回数</span><input name="trips" type="number" min="0" step="1" inputmode="numeric" /></label>
+                <label><span>走行km</span><input name="km" type="number" min="0" step="0.1" inputmode="decimal" /></label>
+              </div>
+            </div>
+
+            <div class="form-card">
+              <div class="section-head tight"><h2>売上内訳</h2><strong id="liveTotal">0円</strong></div>
+              <div class="money-grid">
+                <label><span>現金</span><input name="cash" type="number" min="0" step="1" inputmode="numeric" /></label>
+                <label><span>カード</span><input name="card" type="number" min="0" step="1" inputmode="numeric" /></label>
+                <label><span>IC</span><input name="ic" type="number" min="0" step="1" inputmode="numeric" /></label>
+                <label><span>QR</span><input name="qr" type="number" min="0" step="1" inputmode="numeric" /></label>
+                <label><span>チケット</span><input name="ticket" type="number" min="0" step="1" inputmode="numeric" /></label>
+              </div>
+            </div>
+
+            <div class="form-card">
+              <div class="two-col">
+                <label><span>出庫</span><input name="workStart" type="time" /></label>
+                <label><span>帰庫</span><input name="workEnd" type="time" /></label>
+              </div>
+              <div class="two-col">
+                <label><span>休憩(分)</span><input name="breakMin" type="number" min="0" step="1" inputmode="numeric" /></label>
+                <label><span>燃料費</span><input name="fuel" type="number" min="0" step="1" inputmode="numeric" /></label>
+              </div>
+              <label><span>その他経費</span><input name="expenseOther" type="number" min="0" step="1" inputmode="numeric" /></label>
+              <label><span>メモ</span><textarea name="memo" rows="3" placeholder="乗務メモ"></textarea></label>
+            </div>
+            <div class="action-row">
+              <button class="danger-button hidden" id="deleteEntryBtn" type="button">削除</button>
+              <button class="ghost-button" type="button" data-nav="home">戻る</button>
+              <button class="primary-button" type="submit">保存</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="screen" id="historyScreen" data-title="履歴">
+          <div class="month-row single">
+            <input id="historyMonth" type="month" />
+          </div>
+          <div class="summary-strip" id="historySummary"></div>
+          <div class="entry-list" id="historyEntries"></div>
+        </section>
+
+        <section class="screen" id="exportScreen" data-title="エクスポート">
+          <div class="form-card stack">
+            <fieldset class="segmented vertical">
+              <legend>対象期間</legend>
+              <label><input type="radio" name="rangeMode" value="month" checked />表示月</label>
+              <label><input type="radio" name="rangeMode" value="custom" />任意期間</label>
+              <label><input type="radio" name="rangeMode" value="all" />全期間</label>
+            </fieldset>
+            <div class="two-col" id="customRange">
+              <label><span>開始日</span><input id="exportStart" type="date" /></label>
+              <label><span>終了日</span><input id="exportEnd" type="date" /></label>
+            </div>
+            <p class="status-note" id="exportCount">0件を出力対象にしています。</p>
+            <div class="button-grid">
+              <button class="primary-button" id="xlsxBtn" type="button">ExcelをDL</button>
+              <button class="ghost-button" id="csvBtn" type="button">CSVをDL</button>
+              <button class="ghost-button" id="backupBtn" type="button">JSONバックアップ</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="settingsScreen" data-title="設定">
+          <form class="form-card stack" id="settingsForm">
+            <label>
+              <span>乗務員名</span>
+              <input name="driverName" required />
+            </label>
+            <fieldset class="segmented">
+              <legend>起動時ロック</legend>
+              <label><input type="radio" name="authMode" value="idpw" />ID/PW</label>
+              <label><input type="radio" name="authMode" value="none" />なし</label>
+            </fieldset>
+            <div class="auth-fields" id="settingsAuthFields">
+              <label><span>ログインID</span><input name="userId" autocomplete="username" /></label>
+              <label><span>新しいパスワード</span><input name="password" type="password" autocomplete="new-password" placeholder="変更時のみ入力" /></label>
+            </div>
+            <button class="primary-button" type="submit">設定を保存</button>
+          </form>
+
+          <div class="form-card stack">
+            <h2>バックアップと復元</h2>
+            <label class="check-row"><input id="includePassword" type="checkbox" />ロック情報を含める</label>
+            <button class="ghost-button" id="backupSettingsBtn" type="button">バックアップを書き出す</button>
+            <label class="file-button">
+              <input id="restoreFile" type="file" accept="application/json,.json" />
+              JSONから復元
+            </label>
+            <div class="two-col">
+              <button class="ghost-button" id="mergeRestoreBtn" type="button">マージ復元</button>
+              <button class="ghost-button" id="replaceRestoreBtn" type="button">置換復元</button>
+            </div>
+          </div>
+
+          <div class="danger-zone">
+            <h2>全データ削除</h2>
+            <p>端末内の売上記録と設定を削除します。元に戻せません。</p>
+            <button class="danger-button" id="wipeBtn" type="button">全データ削除</button>
+          </div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" id="bottomNav" aria-label="画面切替">
+        <button data-nav="home" class="active" type="button"><span>⌂</span>ホーム</button>
+        <button data-nav="entry" type="button"><span>＋</span>入力</button>
+        <button data-nav="history" type="button"><span>▤</span>履歴</button>
+        <button data-nav="export" type="button"><span>⇩</span>出力</button>
+        <button data-nav="settings" type="button"><span>⚙</span>設定</button>
+      </nav>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
