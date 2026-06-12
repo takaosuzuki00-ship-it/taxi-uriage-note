@@ -211,13 +211,47 @@
         </section>
 
         <section class="screen" id="payrollScreen" data-title="給与明細">
+          <div class="tab-row" role="tablist" aria-label="給与明細切替">
+            <button class="tab-button active" id="payrollEstimateTab" type="button" data-payroll-tab="estimate">概算</button>
+            <button class="tab-button" id="payrollActualTab" type="button" data-payroll-tab="actual">実績</button>
+          </div>
           <div class="month-row single">
             <input id="payrollMonth" type="month" />
           </div>
-          <div class="notice-card">
+          <div class="notice-card payroll-estimate-area">
             会社の正式明細ではありません。自分用の目安として、保存済みの売上と設定値から概算しています。
           </div>
-          <div class="payroll-panel" id="payrollPanel"></div>
+          <div class="payroll-panel payroll-estimate-area" id="payrollPanel"></div>
+          <div class="payroll-actual-area hidden">
+            <form class="form-card stack" id="payslipForm">
+              <input type="hidden" name="id" />
+              <label><span>年月</span><input name="ym" type="month" required /></label>
+              <div class="two-col">
+                <label><span>支給額</span><input name="gross" type="number" min="0" step="1" inputmode="numeric" /></label>
+                <label><span>控除</span><input name="deduction" type="number" min="0" step="1" inputmode="numeric" /></label>
+              </div>
+              <label><span>手取り</span><input name="net" type="number" min="0" step="1" inputmode="numeric" placeholder="未入力なら自動計算" /></label>
+              <label><span>メモ</span><textarea name="memo" rows="2" placeholder="明細メモ"></textarea></label>
+              <div class="photo-tools">
+                <label class="file-button">
+                  <input id="payslipPhotoInput" type="file" accept="image/*" capture="environment" />
+                  明細写真を添付
+                </label>
+                <button class="ghost-button hidden" id="removePayslipPhotoBtn" type="button">写真を外す</button>
+              </div>
+              <div class="photo-preview hidden" id="payslipPhotoPreview"></div>
+              <div class="action-row inline">
+                <button class="danger-button hidden" id="deletePayslipBtn" type="button">削除</button>
+                <button class="ghost-button" id="resetPayslipBtn" type="button">新規</button>
+                <button class="primary-button" type="submit">実績を保存</button>
+              </div>
+            </form>
+            <div class="section-head">
+              <h2>明細記録</h2>
+              <span id="payslipCount">0件</span>
+            </div>
+            <div class="entry-list" id="payslipList"></div>
+          </div>
           <div class="button-grid">
             <button class="ghost-button" type="button" data-nav="settings">歩合率・基本給を設定</button>
             <button class="ghost-button" type="button" data-nav="home">戻る</button>
@@ -255,6 +289,16 @@
 
             <div class="form-card">
               <div class="section-head tight"><h2>売上内訳</h2><strong id="liveTotal">0円</strong></div>
+              <div class="photo-tools">
+                <label class="file-button">
+                  <input id="entryPhotoOcrInput" type="file" accept="image/*" capture="environment" />
+                  写真から入力
+                </label>
+                <button class="ghost-button hidden" id="removeEntryPhotoBtn" type="button">写真を外す</button>
+              </div>
+              <p class="status-note hidden" id="ocrStatus"></p>
+              <div class="ocr-result hidden" id="ocrResult"></div>
+              <div class="photo-preview hidden" id="entryPhotoPreview"></div>
               <div class="money-grid">
                 <label><span>現金</span><input name="cash" type="number" min="0" step="1" inputmode="numeric" /></label>
                 <label><span>カード</span><input name="card" type="number" min="0" step="1" inputmode="numeric" /></label>
@@ -305,6 +349,7 @@
               <label><span>終了日</span><input id="exportEnd" type="date" /></label>
             </div>
             <p class="status-note" id="exportCount">0件を出力対象にしています。</p>
+            <p class="status-note">JSONバックアップには添付写真も含まれるため、ファイルサイズが大きくなる場合があります。</p>
             <div class="button-grid">
               <button class="primary-button" id="xlsxBtn" type="button">ExcelをDL</button>
               <button class="ghost-button" id="csvBtn" type="button">CSVをDL</button>

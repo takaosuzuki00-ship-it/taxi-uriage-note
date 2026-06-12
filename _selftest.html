@@ -18,14 +18,18 @@
     <pre id="log"></pre>
     <script type="module">
       import { hashPassword, verifyPassword, PBKDF2_ITERATIONS } from "./lib/auth.js";
-      import { calcNet, calcTotal, estimatePayroll, filterByMonth, summarizeEntries, todayString } from "./lib/calc.js";
+      import { calcNet, calcTotal, estimatePayroll, filterByMonth, payslipNet, summarizeEntries, todayString } from "./lib/calc.js";
+      import { parseOcrNumbers } from "./lib/ocr.js";
       import {
         deleteEntry,
+        deletePayslip,
         deleteShift,
         getAllEntries,
+        getAllPayslips,
         getAllShifts,
         getEntry,
         saveEntry,
+        savePayslip,
         saveShift,
         validateEntry,
       } from "./lib/db.js";
@@ -57,6 +61,8 @@
         assert(calcNet(sample) === 15200, "calcNet subtracts fuel and other expense");
         assert(estimatePayroll(100000, { payRate: 50, baseSalary: 0 }) === 50000, "estimatePayroll calculates 50 percent commission");
         assert(estimatePayroll(80000, { payRate: 60, baseSalary: 20000 }) === 68000, "estimatePayroll adds base salary");
+        assert(payslipNet(300000, 50000) === 250000, "payslipNet subtracts deduction from gross");
+        assert(JSON.stringify(parseOcrNumbers("現金 21,000 カード 16,900")) === JSON.stringify([21000, 16900]), "parseOcrNumbers extracts comma grouped yen values");
         assert(summarizeEntries([sample, { ...sample, date: "2026-07-01" }]).total === 38000, "summarizeEntries sums totals");
         assert(filterByMonth([sample, { ...sample, date: "2026-07-01" }], "2026-06").length === 1, "filterByMonth filters YYYY-MM");
         const today = todayString();
@@ -99,6 +105,12 @@
         const shifts = await getAllShifts();
         assert(shifts.some((item) => item.date === today && item.id === shift.id), "db shifts include today's shift");
         await deleteShift(shift.id);
+
+        const payslip = await savePayslip({ ym: "2026-06", gross: 300000, deduction: 50000, net: "", memo: "selftest" });
+        assert(payslip.net === 250000, "db payslip auto-calculates net");
+        const payslips = await getAllPayslips();
+        assert(payslips.some((item) => item.id === payslip.id && item.ym === "2026-06"), "db payslips include saved payslip");
+        await deletePayslip(payslip.id);
 
         status.textContent = "PASS";
         status.className = "pass";

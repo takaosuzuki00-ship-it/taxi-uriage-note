@@ -1,4 +1,4 @@
-const CACHE_NAME = "taxi-sales-note-v3";
+const CACHE_NAME = "taxi-sales-note-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,8 @@ const APP_SHELL = [
   "./lib/calc.js",
   "./lib/db.js",
   "./lib/exporter.js",
+  "./lib/image.js",
+  "./lib/ocr.js",
   "./vendor/xlsx.full.min.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

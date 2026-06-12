@@ -3,16 +3,20 @@ import {
   clearEntries,
   deleteDatabase,
   deleteEntry,
+  deletePayslip,
   deleteShift,
   exportAllData,
   getAllEntries,
+  getAllPayslips,
   getEntry,
+  getPayslip,
   getSettings,
   getShift,
   getAllShifts,
   mergeBackup,
   replaceAll,
   saveEntry,
+  savePayslip,
   saveSettings,
   saveShift,
 } from "./lib/db.js";
@@ -24,9 +28,12 @@ import {
   formatNumber,
   formatYen,
   monthKey,
+  payslipNet,
   summarizeEntries,
   todayString,
 } from "./lib/calc.js";
+import { compressImageFile } from "./lib/image.js";
+import { guessSalesFields, recognizeNumbers } from "./lib/ocr.js";
 import {
   downloadBlob,
   filenameFor,
@@ -44,9 +51,13 @@ const state = {
   unlocked: false,
   entries: [],
   shifts: [],
+  payslips: [],
   activeScreen: "setup",
+  payrollTab: "estimate",
   visibleMonth: monthKey(new Date()),
   restorePayload: null,
+  entryPhoto: null,
+  payslipPhoto: null,
 };
 
 const screens = {
@@ -97,7 +108,7 @@ function showScreen(name) {
 }
 
 async function refreshData() {
-  [state.entries, state.shifts] = await Promise.all([getAllEntries(), getAllShifts()]);
+  [state.entries, state.shifts, state.payslips] = await Promise.all([getAllEntries(), getAllShifts(), getAllPayslips()]);
   renderHome();
   renderHistory();
   renderExportCount();
@@ -162,9 +173,10 @@ function renderEntryList(container, entries) {
   entries.forEach((entry) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "entry-item";
+    button.className = `entry-item${entry.photo ? " has-photo" : ""}`;
     button.dataset.id = entry.id;
     button.innerHTML = `
+      ${entry.photo ? `<img class="thumb" src="${entry.photo}" alt="添付写真" />` : ""}
       <span>
         <small>${entry.date} ${entry.workStart || ""}${entry.workEnd ? `-${entry.workEnd}` : ""}</small>
         <strong>${formatYen(entry.total)}</strong>
@@ -180,6 +192,7 @@ function renderEntryList(container, entries) {
 function fillEntryForm(entry = null) {
   const form = $("#entryForm");
   form.reset();
+  state.entryPhoto = entry?.photo || null;
   form.elements.id.value = entry?.id || "";
   form.date.value = entry?.date || todayString();
   ["trips", "km", "cash", "card", "ic", "qr", "ticket", "breakMin", "fuel", "expenseOther"].forEach((field) => {
@@ -189,6 +202,10 @@ function fillEntryForm(entry = null) {
   form.workEnd.value = entry?.workEnd || "";
   form.memo.value = entry?.memo || "";
   $("#deleteEntryBtn").classList.toggle("hidden", !entry?.id);
+  $("#ocrStatus").classList.add("hidden");
+  $("#ocrResult").classList.add("hidden");
+  renderPhotoPreview("#entryPhotoPreview", state.entryPhoto);
+  $("#removeEntryPhotoBtn").classList.toggle("hidden", !state.entryPhoto);
   updateLiveTotal();
 }
 
@@ -216,6 +233,7 @@ function formEntryPayload() {
     fuel: form.fuel.value,
     expenseOther: form.expenseOther.value,
     memo: form.memo.value,
+    photo: state.entryPhoto,
   };
 }
 
@@ -285,6 +303,9 @@ function renderPayroll() {
   const monthInput = $("#payrollMonth");
   if (!monthInput) return;
   monthInput.value = state.visibleMonth;
+  $$(".tab-button").forEach((button) => button.classList.toggle("active", button.dataset.payrollTab === state.payrollTab));
+  $$(".payroll-estimate-area").forEach((node) => node.classList.toggle("hidden", state.payrollTab !== "estimate"));
+  $$(".payroll-actual-area").forEach((node) => node.classList.toggle("hidden", state.payrollTab !== "actual"));
   const summary = summarizeEntries(currentMonthEntries());
   const payRate = state.settings?.payRate || 0;
   const baseSalary = state.settings?.baseSalary || 0;
@@ -297,6 +318,125 @@ function renderPayroll() {
     <div><span>基本給</span><strong>${formatYen(baseSalary)}</strong></div>
     <div class="payroll-total"><span>概算合計</span><strong>${formatYen(total)}</strong></div>
   `;
+  renderPayslips();
+}
+
+function renderPhotoPreview(selector, dataUrl) {
+  const node = $(selector);
+  if (!node) return;
+  node.classList.toggle("hidden", !dataUrl);
+  node.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="添付写真" />` : "";
+}
+
+function setOcrStatus(message, busy = false) {
+  const node = $("#ocrStatus");
+  node.textContent = message;
+  node.classList.toggle("hidden", !message);
+  node.classList.toggle("busy", busy);
+}
+
+function applyOcrFields(fields = {}) {
+  const form = $("#entryForm");
+  Object.entries(fields).forEach(([field, value]) => {
+    if (form[field] && value !== undefined) form[field].value = value;
+  });
+  updateLiveTotal();
+}
+
+function showOcrResult(numbers = [], fields = {}) {
+  const node = $("#ocrResult");
+  const filled = Object.keys(fields).length ? Object.keys(fields).join(" / ") : "なし";
+  node.innerHTML = `
+    <strong>読取候補</strong>
+    <span>${numbers.length ? numbers.map((value) => value.toLocaleString("ja-JP")).join("、") : "数値なし"}</span>
+    <small>プレフィル: ${escapeHtml(filled)}</small>
+  `;
+  node.classList.remove("hidden");
+}
+
+async function handleEntryPhoto(file) {
+  if (!file) return;
+  try {
+    setOcrStatus("画像を圧縮しています...", true);
+    state.entryPhoto = await compressImageFile(file);
+    renderPhotoPreview("#entryPhotoPreview", state.entryPhoto);
+    $("#removeEntryPhotoBtn").classList.remove("hidden");
+    setOcrStatus("OCR部品を読み込み、端末内で読み取っています...", true);
+    const result = await recognizeNumbers(state.entryPhoto, (message) => {
+      const progress = message.progress ? ` ${Math.round(message.progress * 100)}%` : "";
+      setOcrStatus(`OCR処理中: ${message.status}${progress}`, true);
+    });
+    const fields = Object.keys(result.fields).length ? result.fields : guessSalesFields(result.numbers);
+    applyOcrFields(fields);
+    showOcrResult(result.numbers, fields);
+    setOcrStatus(result.numbers.length ? "読み取り候補を入力しました。保存前に確認してください。" : "読み取れませんでした。手入力してください。", false);
+  } catch (error) {
+    setOcrStatus("読み取れませんでした。手入力してください。", false);
+    toast(error.message || "OCRに失敗しました。");
+  }
+}
+
+function fillPayslipForm(payslip = null) {
+  const form = $("#payslipForm");
+  form.reset();
+  state.payslipPhoto = payslip?.photo || null;
+  form.elements.id.value = payslip?.id || "";
+  form.ym.value = payslip?.ym || state.visibleMonth;
+  form.gross.value = payslip?.gross ?? "";
+  form.deduction.value = payslip?.deduction ?? "";
+  form.net.value = payslip?.net ?? "";
+  form.memo.value = payslip?.memo || "";
+  $("#deletePayslipBtn").classList.toggle("hidden", !payslip?.id);
+  $("#removePayslipPhotoBtn").classList.toggle("hidden", !state.payslipPhoto);
+  renderPhotoPreview("#payslipPhotoPreview", state.payslipPhoto);
+}
+
+function formPayslipPayload() {
+  const form = $("#payslipForm");
+  return {
+    id: form.elements.id.value || undefined,
+    ym: form.ym.value,
+    gross: form.gross.value,
+    deduction: form.deduction.value,
+    net: form.net.value,
+    memo: form.memo.value,
+    photo: state.payslipPhoto,
+  };
+}
+
+async function openPayslip(id = null) {
+  const payslip = id ? await getPayslip(id) : null;
+  fillPayslipForm(payslip);
+  state.payrollTab = "actual";
+  renderPayroll();
+}
+
+function renderPayslips() {
+  const list = $("#payslipList");
+  if (!list) return;
+  const payslips = [...state.payslips];
+  $("#payslipCount").textContent = `${payslips.length}件`;
+  list.innerHTML = "";
+  if (!payslips.length) {
+    list.innerHTML = '<p class="empty">給与明細記録はまだありません。</p>';
+    return;
+  }
+  payslips.forEach((payslip) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `entry-item${payslip.photo ? " has-photo" : ""}`;
+    button.innerHTML = `
+      ${payslip.photo ? `<img class="thumb" src="${payslip.photo}" alt="明細写真" />` : ""}
+      <span>
+        <small>${payslip.ym}</small>
+        <strong>${formatYen(payslip.net)}</strong>
+        <small>支給 ${formatYen(payslip.gross)} / 控除 ${formatYen(payslip.deduction)}</small>
+      </span>
+      <span>${escapeHtml(payslip.memo || "")}</span>
+    `;
+    button.addEventListener("click", () => openPayslip(payslip.id));
+    list.append(button);
+  });
 }
 
 function profileFieldsFromSettings() {
@@ -423,7 +563,7 @@ async function restoreFromSelectedFile(mode) {
   state.settings = await getSettings();
   state.unlocked = state.settings?.authMode !== "idpw";
   driverLabel();
-  await refreshEntries();
+  await refreshData();
   toast("復元しました。");
   showScreen("home");
 }
@@ -495,6 +635,19 @@ $("#entryForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("#entryPhotoOcrInput").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  await handleEntryPhoto(file);
+});
+
+$("#removeEntryPhotoBtn").addEventListener("click", () => {
+  state.entryPhoto = null;
+  renderPhotoPreview("#entryPhotoPreview", null);
+  $("#removeEntryPhotoBtn").classList.add("hidden");
+  toast("添付写真を外しました。");
+});
+
 $("#deleteEntryBtn").addEventListener("click", async () => {
   const id = $("#entryForm").elements.id.value;
   if (!id || !confirm("この売上記録を削除しますか？")) return;
@@ -528,6 +681,61 @@ $("#shiftForm").addEventListener("submit", async (event) => {
   } catch (error) {
     toast(error.message);
   }
+});
+
+$("#payslipForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const payslip = await savePayslip(formPayslipPayload());
+    state.visibleMonth = payslip.ym;
+    await refreshData();
+    fillPayslipForm();
+    state.payrollTab = "actual";
+    renderPayroll();
+    toast("給与明細を保存しました。");
+  } catch (error) {
+    toast(error.message);
+  }
+});
+
+$("#deletePayslipBtn").addEventListener("click", async () => {
+  const id = $("#payslipForm").elements.id.value;
+  if (!id || !confirm("この給与明細記録を削除しますか？")) return;
+  await deletePayslip(id);
+  await refreshData();
+  fillPayslipForm();
+  state.payrollTab = "actual";
+  renderPayroll();
+  toast("給与明細を削除しました。");
+});
+
+$("#resetPayslipBtn").addEventListener("click", () => fillPayslipForm());
+
+$("#payslipPhotoInput").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  try {
+    state.payslipPhoto = await compressImageFile(file);
+    renderPhotoPreview("#payslipPhotoPreview", state.payslipPhoto);
+    $("#removePayslipPhotoBtn").classList.remove("hidden");
+    toast("明細写真を添付しました。");
+  } catch (error) {
+    toast(error.message);
+  }
+});
+
+$("#removePayslipPhotoBtn").addEventListener("click", () => {
+  state.payslipPhoto = null;
+  renderPhotoPreview("#payslipPhotoPreview", null);
+  $("#removePayslipPhotoBtn").classList.add("hidden");
+  toast("明細写真を外しました。");
+});
+
+$("#payslipForm").addEventListener("input", () => {
+  const form = $("#payslipForm");
+  if (form.net.value) return;
+  form.net.placeholder = `${formatYen(payslipNet(form.gross.value, form.deduction.value))}（自動計算）`;
 });
 
 $("#deleteShiftBtn").addEventListener("click", async () => {
@@ -583,6 +791,12 @@ $("#payrollMonth").addEventListener("change", (event) => {
   renderHome();
   renderPayroll();
 });
+$$("#payrollScreen [data-payroll-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.payrollTab = button.dataset.payrollTab;
+    renderPayroll();
+  });
+});
 $("#prevShiftMonthBtn").addEventListener("click", () => changeMonth(-1));
 $("#nextShiftMonthBtn").addEventListener("click", () => changeMonth(1));
 $("#newEntryBtn").addEventListener("click", () => openEntry());
@@ -632,6 +846,8 @@ $("#wipeBtn").addEventListener("click", async () => {
   await deleteDatabase();
   state.settings = null;
   state.entries = [];
+  state.shifts = [];
+  state.payslips = [];
   state.unlocked = false;
   driverLabel();
   toast("全データを削除しました。");

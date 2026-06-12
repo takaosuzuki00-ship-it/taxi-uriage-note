@@ -483,6 +483,20 @@ textarea:focus {
   color: inherit;
 }
 
+.entry-item.has-photo {
+  grid-template-columns: 72px 1fr auto;
+  align-items: center;
+}
+
+.thumb {
+  width: 72px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--field);
+}
+
 .entry-item strong {
   display: block;
   font-size: 18px;
@@ -602,6 +616,87 @@ textarea:focus {
   border-radius: var(--radius);
   background: rgba(255, 250, 240, 0.9);
   box-shadow: 0 10px 26px rgba(25, 35, 33, 0.08);
+}
+
+.tab-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tab-button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff7df;
+  color: var(--deep);
+  font-weight: 900;
+}
+
+.tab-button.active {
+  background: var(--deep);
+  color: #fff9e8;
+}
+
+.photo-tools {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+
+.photo-preview {
+  margin: 10px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--field);
+}
+
+.photo-preview img {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+}
+
+.ocr-result {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 12px;
+  padding: 11px;
+  border: 1px solid rgba(47, 128, 103, 0.28);
+  border-radius: 8px;
+  background: rgba(47, 128, 103, 0.08);
+}
+
+.ocr-result strong,
+.ocr-result small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ocr-result span {
+  color: var(--deep);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.status-note.busy::after {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  animation: dots 1s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75%, 100% { content: "..."; }
 }
 
 .notice-card {
@@ -785,5 +880,23 @@ textarea:focus {
 
   .money-grid label:first-of-type {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .entry-item.has-photo {
+    grid-template-columns: 60px 1fr;
+  }
+
+  .entry-item.has-photo > span:last-child {
+    grid-column: 2;
+  }
+
+  .thumb {
+    width: 60px;
+  }
+
+  .photo-tools {
+    grid-template-columns: 1fr;
   }
 }
