@@ -1,8 +1,9 @@
-const CACHE_NAME = "taxi-sales-note-v1";
+const CACHE_NAME = "taxi-sales-note-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
+  "./gate.js",
   "./app.js",
   "./manifest.webmanifest",
   "./lib/auth.js",
